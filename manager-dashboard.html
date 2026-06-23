@@ -318,6 +318,23 @@ table.crm-table td{padding:10px 12px;border-bottom:1px solid var(--bg-cream);}
 var STAGES = ['Новая заявка', 'Поиск кандидатов', 'Видеозвонки', 'Пробные дни', 'Договор подписан', 'Закрыта', 'Отказ'];
 var currentUser = null;
 
+async function apiCall(url, options){
+  try {
+    var res = await fetch(url, options);
+    var data = await res.json().catch(function(){ return {}; });
+    if(!res.ok || data.ok === false){
+      console.error('Ошибка запроса к ' + url + ':', res.status, data.error);
+      alert('Не удалось сохранить данные (' + (data.error || ('код ' + res.status)) + '). Попробуйте обновить страницу и войти заново.');
+      return null;
+    }
+    return data;
+  } catch(err){
+    console.error('Сетевая ошибка при запросе к ' + url + ':', err);
+    alert('Нет связи с сервером. Проверьте интернет-соединение и попробуйте снова.');
+    return null;
+  }
+}
+
 function stageClass(stage){ return 'stage-' + stage.replace(/ /g, '.'); }
 function fmtMoney(n){ return Number(n).toLocaleString('ru-RU') + ' ₽'; }
 function fmtDateTime(iso){
@@ -326,11 +343,10 @@ function fmtDateTime(iso){
 }
 
 async function loadDeals(){
-  var res = await fetch('/.netlify/functions/deals');
-  var data = await res.json();
+  var data = await apiCall('/.netlify/functions/deals');
   var tbody = document.getElementById('deals-tbody');
   tbody.innerHTML = '';
-  if(!data.deals || !data.deals.length){ document.getElementById('deals-empty').style.display='block'; return; }
+  if(!data || !data.deals || !data.deals.length){ document.getElementById('deals-empty').style.display='block'; return; }
   document.getElementById('deals-empty').style.display='none';
   data.deals.slice().reverse().forEach(function(d){
     var tr = document.createElement('tr');
@@ -346,8 +362,8 @@ async function loadDeals(){
   tbody.querySelectorAll('.del-deal-btn').forEach(function(btn){
     btn.addEventListener('click', async function(){
       if(!confirm('Удалить сделку?')) return;
-      await fetch('/.netlify/functions/deals', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'delete', id: btn.dataset.id})});
-      loadDeals();
+      var r = await apiCall('/.netlify/functions/deals', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'delete', id: btn.dataset.id})});
+      if(r) loadDeals();
     });
   });
   tbody.querySelectorAll('.edit-stage-btn').forEach(function(btn){
@@ -356,9 +372,9 @@ async function loadDeals(){
       var options = STAGES.map(function(s){return s;}).join(', ');
       var newStage = prompt('Новая стадия (' + options + '):', deal.stage);
       if(!newStage || STAGES.indexOf(newStage) === -1) return;
-      await fetch('/.netlify/functions/deals', {method:'POST', headers:{'Content-Type':'application/json'},
+      var r = await apiCall('/.netlify/functions/deals', {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({id: deal.id, client_name: deal.client_name, service: deal.service, amount: deal.amount, nanny_sent: deal.nanny_sent, stage: newStage})});
-      loadDeals();
+      if(r) loadDeals();
     });
   });
 }
@@ -370,8 +386,9 @@ document.getElementById('add-deal-btn').addEventListener('click', async function
   var nanny_sent = document.getElementById('new-nanny').value.trim();
   var stage = document.getElementById('new-stage').value;
   if(!client_name){ alert('Укажите имя клиента'); return; }
-  await fetch('/.netlify/functions/deals', {method:'POST', headers:{'Content-Type':'application/json'},
+  var r = await apiCall('/.netlify/functions/deals', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({client_name: client_name, service: service, amount: amount, nanny_sent: nanny_sent, stage: stage})});
+  if(!r) return;
   document.getElementById('new-client-name').value='';
   document.getElementById('new-amount').value='';
   document.getElementById('new-nanny').value='';
@@ -431,8 +448,8 @@ document.getElementById('cal-next-btn').addEventListener('click', function(){
 });
 
 async function loadCalendar(){
-  var res = await fetch('/.netlify/functions/calendar');
-  var data = await res.json();
+  var data = await apiCall('/.netlify/functions/calendar');
+  if(!data){ renderMonthCalendar(); return; }
   allCalEvents = (data.events||[]).slice().sort(function(a,b){ return new Date(a.datetime) - new Date(b.datetime); });
   renderMonthCalendar();
 
@@ -449,8 +466,8 @@ async function loadCalendar(){
   });
   list.querySelectorAll('.del-cal-btn').forEach(function(btn){
     btn.addEventListener('click', async function(){
-      await fetch('/.netlify/functions/calendar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'delete', id: btn.dataset.id})});
-      loadCalendar();
+      var r = await apiCall('/.netlify/functions/calendar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'delete', id: btn.dataset.id})});
+      if(r) loadCalendar();
     });
   });
 }
@@ -461,8 +478,9 @@ document.getElementById('add-cal-btn').addEventListener('click', async function(
   var platform = document.getElementById('new-cal-platform').value;
   var notes = document.getElementById('new-cal-notes').value.trim();
   if(!datetime){ alert('Укажите дату и время звонка'); return; }
-  await fetch('/.netlify/functions/calendar', {method:'POST', headers:{'Content-Type':'application/json'},
+  var r = await apiCall('/.netlify/functions/calendar', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({client_name: client_name, datetime: new Date(datetime).toISOString(), platform: platform, notes: notes})});
+  if(!r) return;
   document.getElementById('new-cal-client').value='';
   document.getElementById('new-cal-datetime').value='';
   document.getElementById('new-cal-notes').value='';

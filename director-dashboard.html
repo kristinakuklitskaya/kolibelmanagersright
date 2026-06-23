@@ -290,6 +290,23 @@ table.crm-table td{padding:10px 12px;border-bottom:1px solid var(--bg-cream);}
 <script src="auth-check.js"></script>
 <script>
 var STAGES = ['Новая заявка','Поиск кандидатов','Видеозвонки','Пробные дни','Договор подписан','Закрыта','Отказ'];
+
+async function apiCall(url, options){
+  try {
+    var res = await fetch(url, options);
+    var data = await res.json().catch(function(){ return {}; });
+    if(!res.ok || data.ok === false){
+      console.error('Ошибка запроса к ' + url + ':', res.status, data.error);
+      alert('Не удалось сохранить данные (' + (data.error || ('код ' + res.status)) + '). Попробуйте обновить страницу и войти заново.');
+      return null;
+    }
+    return data;
+  } catch(err){
+    console.error('Сетевая ошибка при запросе к ' + url + ':', err);
+    alert('Нет связи с сервером. Проверьте интернет-соединение и попробуйте снова.');
+    return null;
+  }
+}
 var MANAGER_NAMES = {valeria:'Валерия', manager2:'Менеджер 2'};
 var allDeals = [];
 var allFinance = [];
@@ -345,8 +362,8 @@ function renderDeals(){
 }
 
 async function loadDeals(){
-  var res = await fetch('/.netlify/functions/deals');
-  var data = await res.json();
+  var data = await apiCall('/.netlify/functions/deals');
+  if(!data) return;
   allDeals = data.deals || [];
   renderSummary();
   renderStaff();
@@ -354,8 +371,8 @@ async function loadDeals(){
 }
 
 async function loadFinance(){
-  var res = await fetch('/.netlify/functions/finance');
-  var data = await res.json();
+  var data = await apiCall('/.netlify/functions/finance');
+  if(!data) return;
   allFinance = data.entries || [];
   renderSummary();
   var tbody = document.getElementById('fin-tbody');
@@ -371,8 +388,8 @@ async function loadFinance(){
   });
   tbody.querySelectorAll('.del-fin-btn').forEach(function(btn){
     btn.addEventListener('click', async function(){
-      await fetch('/.netlify/functions/finance', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'delete', id: btn.dataset.id})});
-      loadFinance();
+      var r = await apiCall('/.netlify/functions/finance', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'delete', id: btn.dataset.id})});
+      if(r) loadFinance();
     });
   });
 }
@@ -383,7 +400,8 @@ document.getElementById('add-fin-btn').addEventListener('click', async function(
   var description = document.getElementById('fin-desc').value.trim();
   var date = document.getElementById('fin-date').value || new Date().toISOString().slice(0,10);
   if(!amount){ alert('Укажите сумму'); return; }
-  await fetch('/.netlify/functions/finance', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type:type, amount:amount, description:description, date:date})});
+  var r = await apiCall('/.netlify/functions/finance', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type:type, amount:amount, description:description, date:date})});
+  if(!r) return;
   document.getElementById('fin-amount').value='';
   document.getElementById('fin-desc').value='';
   loadFinance();
